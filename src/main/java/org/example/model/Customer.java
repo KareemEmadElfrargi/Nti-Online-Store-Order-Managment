@@ -16,7 +16,7 @@ public class Customer extends BaseEntity {
     @Embedded
     private Address shippingAddress;
 
-    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<Order> orders = new HashSet<>();
 
     protected Customer() {

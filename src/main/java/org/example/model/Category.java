@@ -1,6 +1,7 @@
 package org.example.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -14,7 +15,7 @@ public class Category extends BaseEntity {
 
     private String name;
 
-    @ManyToMany(mappedBy = "categories")
+    @ManyToMany(mappedBy = "categories", fetch = FetchType.LAZY)
     private Set<Product> products = new HashSet<>();
 
     protected Category() {

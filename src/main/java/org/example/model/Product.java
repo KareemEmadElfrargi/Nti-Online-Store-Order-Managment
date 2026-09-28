@@ -10,6 +10,7 @@ import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @Entity
@@ -86,5 +87,17 @@ public class Product extends BaseEntity {
 
     public Set<Category> getCategories() {
         return categories;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Product product)) return false;
+        return Objects.equals(sku, product.sku);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(sku);
     }
 }
