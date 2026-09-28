@@ -89,6 +89,13 @@ public class Product extends BaseEntity {
         return categories;
     }
 
+    /**
+     * Overridden on sku, not id, because sku is the natural business key:
+     * it is unique, assigned before persistence, and never changes, so
+     * equality stays stable even for transient/detached instances (e.g.
+     * in HashSet<Product> categories or across ManyToMany merges), unlike
+     * the generated id which is null until the entity is saved.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
