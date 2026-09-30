@@ -1,5 +1,7 @@
 package org.example.service;
 
+import org.example.dto.OrderItemSummary;
+import org.example.dto.OrderSummary;
 import org.example.exception.InsufficientStockException;
 import org.example.exception.InvalidOrderStateException;
 import org.example.exception.ResourceNotFoundException;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -84,5 +87,65 @@ public class OrderService {
         order.setStatus(OrderStatus.PAID);
 
         return order;
+    }
+
+    @Transactional
+    public Order ship(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+
+        if (order.getStatus() != OrderStatus.PAID) {
+            throw new InvalidOrderStateException(
+                    "Only PAID orders can be shipped; order " + orderId + " is " + order.getStatus());
+        }
+
+        order.setStatus(OrderStatus.SHIPPED);
+        return order;
+    }
+
+    @Transactional
+    public Order cancel(Long orderId) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+
+        if (order.getStatus() != OrderStatus.NEW && order.getStatus() != OrderStatus.PAID) {
+            throw new InvalidOrderStateException(
+                    "Only NEW or PAID orders can be cancelled; order " + orderId + " is " + order.getStatus());
+        }
+
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+            product.setStock(product.getStock() + item.getQuantity());
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        return order;
+    }
+
+    @Transactional(readOnly = true)
+    public OrderSummary getOrderSummary(Long orderId) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+
+        List<OrderItemSummary> items = order.getItems().stream()
+                .map(item -> new OrderItemSummary(
+                        item.getProduct().getId(),
+                        item.getProduct().getSku(),
+                        item.getProduct().getName(),
+                        item.getQuantity(),
+                        item.getUnitPrice(),
+                        item.getSubtotal()))
+                .toList();
+
+        Payment payment = order.getPayment();
+        return new OrderSummary(
+                order.getId(),
+                order.getCustomer().getId(),
+                order.getCustomer().getName(),
+                order.getStatus(),
+                order.getOrderedAt(),
+                items,
+                order.getTotal(),
+                payment == null ? null : payment.getMethod(),
+                payment == null ? null : payment.getPaidAt());
     }
 }
