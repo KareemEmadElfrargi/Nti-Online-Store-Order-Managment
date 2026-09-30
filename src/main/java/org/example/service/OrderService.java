@@ -28,13 +28,16 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
+    private final AuditService auditService;
 
     public OrderService(OrderRepository orderRepository,
                         CustomerRepository customerRepository,
-                        ProductRepository productRepository) {
+                        ProductRepository productRepository,
+                        AuditService auditService) {
         this.orderRepository = orderRepository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -48,24 +51,30 @@ public class OrderService {
 
         Order order = new Order(customer);
 
-        for (Map.Entry<Long, Integer> line : productQuantities.entrySet()) {
-            Long productId = line.getKey();
-            int quantity = line.getValue() == null ? 0 : line.getValue();
+        try {
+            for (Map.Entry<Long, Integer> line : productQuantities.entrySet()) {
+                Long productId = line.getKey();
+                int quantity = line.getValue() == null ? 0 : line.getValue();
 
-            Product product = productRepository.findById(productId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Product", productId));
+                Product product = productRepository.findById(productId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Product", productId));
 
-            if (quantity <= 0) {
-                throw new InsufficientStockException(
-                        "Quantity must be greater than 0 for product " + product.getSku());
+                if (quantity <= 0) {
+                    throw new InsufficientStockException(
+                            "Quantity must be greater than 0 for product " + product.getSku());
+                }
+                if (product.getStock() < quantity) {
+                    throw new InsufficientStockException("Insufficient stock for product " + product.getSku()
+                            + ": requested " + quantity + ", available " + product.getStock());
+                }
+
+                product.setStock(product.getStock() - quantity);
+                order.addItem(new OrderItem(product, quantity)); // unit price copied from product here
             }
-            if (product.getStock() < quantity) {
-                throw new InsufficientStockException("Insufficient stock for product " + product.getSku()
-                        + ": requested " + quantity + ", available " + product.getStock());
-            }
-
-            product.setStock(product.getStock() - quantity);
-            order.addItem(new OrderItem(product, quantity)); // unit price copied from product here
+        } catch (InsufficientStockException e) {
+            // the order rolls back, but the audit entry is committed in its own transaction
+            auditService.record("PLACE_ORDER_FAILED", "customer " + customerId + ": " + e.getMessage());
+            throw e;
         }
 
         return orderRepository.save(order);
@@ -86,6 +95,8 @@ public class OrderService {
         order.setPayment(payment); // cascades persist to Payment
         order.setStatus(OrderStatus.PAID);
 
+        // no orderRepository.save(): the order is managed in this transaction, so
+        // dirty checking flushes the status change (and cascades the Payment) on commit
         return order;
     }
 
