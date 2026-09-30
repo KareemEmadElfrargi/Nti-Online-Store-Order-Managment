@@ -171,3 +171,10 @@ Implement in `ReportRepository`, returning DTOs (Java `record`s) through **JPQL 
 6. **Bulk update:** `applyDiscount(String category, double percent)` reduces prices with a single JPQL update, then clears the persistence context. Explain in the README why `clear()` is needed.
 
 ---
+### Why `applyDiscount` calls `clear()`
+
+A JPQL bulk `update` runs directly against the database and bypasses the persistence context (the first-level cache). Any `Product` already loaded in the current `EntityManager` keeps its old in-memory `price`, so later reads in the same transaction, such as `find()` or `findById()`, would return stale prices that no longer match the database. Worse, if that stale entity is later modified, the flush would write the old price back over the discount.
+
+`applyDiscount` therefore calls `flush()` first, so pending changes are written and not lost, then runs the update, then calls `clear()` to detach everything. The next read reloads fresh rows from the database.
+
+Bulk updates also skip the `@Version` handling, so the query increments `version` manually to keep optimistic locking consistent.
