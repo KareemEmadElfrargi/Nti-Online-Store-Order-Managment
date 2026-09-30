@@ -1,10 +1,14 @@
 package org.example.service;
 
 import org.example.exception.InsufficientStockException;
+import org.example.exception.InvalidOrderStateException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.Customer;
 import org.example.model.Order;
 import org.example.model.OrderItem;
+import org.example.model.OrderStatus;
+import org.example.model.Payment;
+import org.example.model.PaymentMethod;
 import org.example.model.Product;
 import org.example.repository.CustomerRepository;
 import org.example.repository.OrderRepository;
@@ -12,6 +16,7 @@ import org.example.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Service
@@ -29,10 +34,6 @@ public class OrderService {
         this.productRepository = productRepository;
     }
 
-    /**
-     * Creates a NEW order in a single transaction. Any unchecked exception (e.g.
-     * InsufficientStockException) rolls back the order and all stock decrements.
-     */
     @Transactional
     public Order placeOrder(Long customerId, Map<Long, Integer> productQuantities) {
         if (productQuantities == null || productQuantities.isEmpty()) {
@@ -65,5 +66,23 @@ public class OrderService {
         }
 
         return orderRepository.save(order);
+    }
+
+    @Transactional
+    public Order pay(Long orderId, PaymentMethod method) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+
+        if (order.getStatus() != OrderStatus.NEW) {
+            throw new InvalidOrderStateException(
+                    "Only NEW orders can be paid; order " + orderId + " is " + order.getStatus());
+        }
+
+        Payment payment = new Payment(order.getTotal(), method);
+        payment.setPaidAt(LocalDateTime.now());
+        order.setPayment(payment); // cascades persist to Payment
+        order.setStatus(OrderStatus.PAID);
+
+        return order;
     }
 }
